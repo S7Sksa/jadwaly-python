@@ -18,6 +18,8 @@ class LocalUploadedFile:
 
 
 class JadwalyDesktop(tk.Tk):
+    """النافذة الرئيسية التي تجمع الإدخال والتحليل والمساعد الذكي."""
+
     def __init__(self):
         super().__init__()
         self.title("جدولي | مخطط الطالب الجامعي")
@@ -29,6 +31,7 @@ class JadwalyDesktop(tk.Tk):
         self._refresh()
 
     def _configure_style(self):
+        """توحيد ألوان وخطوط وأحجام عناصر واجهة التطبيق."""
         self.configure(bg="#f6f8fc")
         style = ttk.Style(self)
         style.theme_use("clam")
@@ -43,6 +46,7 @@ class JadwalyDesktop(tk.Tk):
         style.configure("Treeview.Heading", font=("Arial", 10, "bold"))
 
     def _build_ui(self):
+        """إنشاء الشريط العلوي وعلامات التبويب الرئيسية."""
         header = ttk.Frame(self)
         header.pack(fill="x", padx=24, pady=(20, 8))
         ttk.Label(header, text="جدولي", style="Title.TLabel").pack(anchor="e")
@@ -61,6 +65,7 @@ class JadwalyDesktop(tk.Tk):
         self._build_chat_tab()
 
     def _build_entry_tab(self):
+        """بناء شاشة إدخال المحاضرات يدويًا أو من ملف PDF."""
         form = ttk.LabelFrame(self.entry_tab, text="إضافة محاضرة يدويًا", padding=12)
         form.pack(fill="x", pady=(0, 12))
         self.fields = {}
@@ -95,12 +100,14 @@ class JadwalyDesktop(tk.Tk):
         self.tree.pack(fill="both", expand=True)
 
     def _build_analysis_tab(self):
+        """بناء شاشة عرض مؤشرات ضغط الجدول والاقتراحات."""
         self.analysis_text = tk.Text(self.analysis_tab, wrap="word", height=22, font=("Arial", 13), padx=15, pady=15, bg="#fbfbff", fg="#172033")
         self.analysis_text.pack(fill="both", expand=True)
         self.analysis_text.configure(state="disabled")
         ttk.Button(self.analysis_tab, text="إعادة التحليل", command=self._refresh_analysis).pack(anchor="e", pady=10)
 
     def _build_chat_tab(self):
+        """بناء شاشة المحادثة مع المساعد المحلي المرتبط ببيانات الجدول."""
         self.chat_log = tk.Text(self.chat_tab, wrap="word", height=22, font=("Arial", 12), padx=15, pady=15, bg="#fbfbff", fg="#172033")
         self.chat_log.pack(fill="both", expand=True)
         self.chat_log.insert("end", "المساعد: أهلًا! اسألني عن أفضل يوم للمذاكرة أو أوقات فراغك.\n\n")
@@ -112,6 +119,7 @@ class JadwalyDesktop(tk.Tk):
         ttk.Button(row, text="إرسال", style="Accent.TButton", command=self._chat).pack(side="left")
 
     def _add_lecture(self, lecture=None):
+        """التحقق من محاضرة جديدة وإضافتها إلى القائمة الداخلية."""
         if lecture is None:
             lecture = {key: entry.get().strip() for key, entry in self.fields.items()}
             lecture.update({"day": self.day_var.get(), "kind": "نظري"})
@@ -125,6 +133,7 @@ class JadwalyDesktop(tk.Tk):
         return True
 
     def _refresh(self):
+        """تحديث جدول Treeview وإعادة حساب التحليل بعد أي تغيير."""
         for item in self.tree.get_children():
             self.tree.delete(item)
         for lecture in self.lectures:
@@ -132,6 +141,7 @@ class JadwalyDesktop(tk.Tk):
         self._refresh_analysis()
 
     def _refresh_analysis(self):
+        """تحويل نتيجة التحليل إلى نص واضح داخل شاشة التحليل."""
         result = analyze_schedule(self.lectures)
         lines = ["ملخص الجدول", "=" * 45, f"إجمالي ساعات المحاضرات: {result['total_hours']} ساعة", f"أكثر يوم ازدحامًا: {result['busiest']['day']}", f"أفضل يوم للمذاكرة: {result['best_day']}", f"مستوى الضغط: {result['pressure']}", f"عدد التعارضات: {len(result['conflicts'])}", "", "الاقتراحات:"]
         lines += [f"• {item}" for item in result["suggestions"]] or ["• أضف محاضرات ليظهر التحليل."]
@@ -144,6 +154,7 @@ class JadwalyDesktop(tk.Tk):
         self.analysis_text.configure(state="disabled")
 
     def _upload_pdf(self):
+        """اختيار PDF، استخراج محاضراته، ثم طلب موافقة المستخدم قبل الحفظ."""
         path = filedialog.askopenfilename(title="اختر جدول PDF", filetypes=[("PDF files", "*.pdf")])
         if not path:
             return
@@ -162,6 +173,7 @@ class JadwalyDesktop(tk.Tk):
             messagebox.showinfo("تم", "تمت إضافة محاضرات PDF إلى الجدول.")
 
     def _chat(self):
+        """إرسال سؤال المستخدم إلى المساعد المحلي وعرض الرد في سجل المحادثة."""
         question = self.question.get().strip()
         if not question:
             return
@@ -172,11 +184,13 @@ class JadwalyDesktop(tk.Tk):
         self.question.delete(0, "end")
 
     def _clear(self):
+        """حذف جميع المحاضرات بعد أخذ تأكيد من المستخدم."""
         if messagebox.askyesno("تأكيد", "هل تريد حذف جميع المحاضرات؟"):
             self.lectures = []
             self._refresh()
 
     def _export(self):
+        """تصدير الجدول الحالي إلى ملف JSON يمكن الاحتفاظ به أو مشاركته."""
         path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON", "*.json")], initialfile="jadwaly-schedule.json")
         if path:
             with open(path, "w", encoding="utf-8") as file:
