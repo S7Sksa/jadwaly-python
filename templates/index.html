@@ -10,6 +10,7 @@
   </style>
 </head>
 <body>
+<!-- الحاوية الرئيسية للتطبيق: رأس الصفحة، البطاقة التعريفية، وبطاقات الجدول والتحليل. -->
 <div class="app">
   <header class="topbar"><div class="brand"><div class="logo">ج</div><div><h1>جدولي</h1><small>مخططك الجامعي بذكاء</small></div></div><div class="top-actions"><button class="icon-btn" id="themeBtn" title="الوضع الليلي">◐</button><button class="ghost" id="downloadBtn">تحميل الجدول</button></div></header>
   <section class="hero"><div><h2>رتّب أسبوعك، وخلّ وقتك أذكى.</h2><p>أدخل جدولك الجامعي وشاهد أوقات الفراغ، مستوى الضغط، وأفضل أوقات المذاكرة في ثوانٍ.</p><button class="btn" onclick="document.getElementById('entry').scrollIntoView({behavior:'smooth'})">ابدأ الآن ←</button></div><div class="hero-art">◫</div></section>
@@ -25,19 +26,24 @@
   </main>
 </div><div class="toast" id="toast"></div>
 <script>
+// ترتيب الأيام والألوان المستخدمة عند بناء الجدول الأسبوعي.
 const DAYS=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس']; let lectures=JSON.parse(localStorage.getItem('jadwalyLectures')||'[]');
 const colors=['#6256e8','#ef7b9b','#f29a4a','#16ad9b','#4585e6','#9b65cc'];
 const $=id=>document.getElementById(id); const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// حفظ الجدول محليًا ثم إعادة رسم الواجهة حتى تظهر التغييرات فورًا.
 function save(){localStorage.setItem('jadwalyLectures',JSON.stringify(lectures)); render();}
 function render(){
+  // إعادة بناء قائمة المحاضرات والتقويم الأسبوعي من البيانات الحالية.
   $('lectureList').innerHTML=lectures.length?lectures.map((x,i)=>`<div class="lecture"><div><strong>${esc(x.subject)}</strong><br><span>${esc(x.day)} · ${x.start} — ${x.end}${x.room?' · قاعة '+esc(x.room):''}</span></div><button class="delete" onclick="removeLecture(${i})">×</button></div>`).join(''):'<div class="notice">لم تتم إضافة محاضرات بعد.</div>';
   $('week').innerHTML=DAYS.map(day=>{let items=lectures.filter(x=>x.day===day).sort((a,b)=>a.start.localeCompare(b.start));return `<div class="day"><div class="day-name">${day}</div>${items.length?items.map((x,i)=>`<div class="event" style="background:${colors[(lectures.indexOf(x))%colors.length]}"><b>${esc(x.subject)}</b>${x.start} - ${x.end}<br>${esc(x.kind)}${x.room?' · '+esc(x.room):''}</div>`).join(''):'<div class="empty">لا توجد محاضرات</div>'}</div>`}).join('');
   fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lectures})}).then(r=>r.json()).then(updateAnalysis); $('updated').textContent=lectures.length?'آخر تحديث الآن':'';
 }
+// عرض نتيجة التحليل القادمة من Flask داخل بطاقات الملخص.
 function updateAnalysis(a){$('totalHours').textContent=a.total_hours;$('busyDay').textContent=a.busiest.day==='-'?'—':a.busiest.day;$('bestDay').textContent=a.best_day==='-'?'—':a.best_day;$('conflictCount').textContent=a.conflicts.length;$('pressure').textContent=a.pressure;$('suggestions').innerHTML=(a.suggestions.length?a.suggestions:['أضف محاضراتك ليظهر التحليل الذكي.']).map(x=>`<li>${esc(x)}</li>`).join('');}
 function removeLecture(i){lectures.splice(i,1);save();}
 $('addBtn').onclick=()=>{let x={subject:$('subject').value.trim(),doctor:$('doctor').value.trim(),day:$('day').value,start:$('start').value,end:$('end').value,room:$('room').value.trim(),kind:$('kind').value};if(!x.subject||!x.day||!x.start||!x.end||x.end<=x.start){toast('أكمل اسم المادة واليوم والوقت بشكل صحيح');return}lectures.push(x);['subject','doctor','start','end','room'].forEach(id=>$(id).value='');$('day').value='';save();toast('تمت إضافة المحاضرة');};
 $('uploadPdfBtn').onclick=()=>{let file=$('pdfFile').files[0];if(!file){toast('اختر ملف PDF أولًا');return}let form=new FormData();form.append('pdf',file);$('uploadPdfBtn').disabled=true;$('uploadPdfBtn').textContent='جارٍ التحليل...';fetch('/api/upload-pdf',{method:'POST',body:form}).then(r=>r.json()).then(x=>{if(x.lectures&&x.lectures.length){let approved=confirm(x.message+'\n\n'+x.lectures.map((v,i)=>`${i+1}. ${v.subject} — ${v.day} — ${v.start} إلى ${v.end}`).join('\n')+'\n\nاضغط موافق لإضافتها إلى جدولك.');if(approved){lectures=lectures.concat(x.lectures);save();toast('تمت إضافة محاضرات PDF');}}else toast(x.message||'لم يتم استخراج محاضرات');}).catch(()=>toast('حدث خطأ أثناء رفع الملف')).finally(()=>{$('uploadPdfBtn').disabled=false;$('uploadPdfBtn').textContent='رفع وتحليل PDF';});};
+// رفع PDF ثم طلب موافقة المستخدم قبل دمج المحاضرات المستخرجة مع جدوله.
 $('clearBtn').onclick=()=>{if(confirm('هل تريد حذف الجدول من هذا المتصفح؟')){lectures=[];save();}};
 $('downloadBtn').onclick=()=>{let blob=new Blob([JSON.stringify(lectures,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='jadwaly-schedule.json';a.click();};
 $('chatForm').onsubmit=e=>{e.preventDefault();let q=$('question').value.trim();if(!q)return;addBubble(q,'user');$('question').value='';fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,lectures})}).then(r=>r.json()).then(x=>addBubble(x.answer,'bot'));};

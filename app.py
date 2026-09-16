@@ -9,11 +9,13 @@ from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
 
+# الأيام الدراسية المدعومة في النسخة الحالية من التطبيق.
 DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"]
 DAY_INDEX = {day: i for i, day in enumerate(DAYS)}
 
 
 def to_minutes(value):
+    """تحويل الوقت من HH:MM إلى دقائق لتسهيل المقارنة والحساب."""
     try:
         hour, minute = [int(part) for part in value.split(":")]
         return hour * 60 + minute
@@ -30,6 +32,7 @@ def format_minutes(total):
 
 
 def validate_lecture(item):
+    """التأكد من اكتمال بيانات المحاضرة وأن وقت النهاية بعد البداية."""
     required = ["subject", "day", "start", "end"]
     if any(not str(item.get(key, "")).strip() for key in required):
         return False
@@ -38,6 +41,7 @@ def validate_lecture(item):
 
 
 def analyze_schedule(lectures):
+    """إنشاء ملخص إحصائي للجدول دون الحاجة إلى خدمة ذكاء اصطناعي."""
     valid = [x for x in lectures if validate_lecture(x)]
     by_day = {day: [] for day in DAYS}
     for lecture in valid:
@@ -48,6 +52,7 @@ def analyze_schedule(lectures):
     daily = []
     all_gaps = []
     conflicts = []
+    # ترتيب محاضرات كل يوم يسمح باكتشاف التعارضات والفجوات الزمنية.
     for day in DAYS:
         items = sorted(by_day[day], key=lambda x: x["start_min"])
         hours = sum(x["end_min"] - x["start_min"] for x in items) / 60
@@ -78,6 +83,7 @@ def analyze_schedule(lectures):
 
 
 def local_chat(question, lectures):
+    """ردود محلية سريعة تعمل كخطة بديلة عند عدم وجود مفتاح Gemini."""
     analysis = analyze_schedule(lectures)
     q = question.lower()
     if any(word in q for word in ["مذاكرة", "مذاكر", "study"]):
@@ -92,6 +98,7 @@ def local_chat(question, lectures):
 
 
 def gemini_chat(question, lectures):
+    """إرسال سؤال الطالب وجدوله إلى Gemini مع الرجوع للتحليل المحلي عند الفشل."""
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return local_chat(question, lectures), False
@@ -110,7 +117,7 @@ def gemini_chat(question, lectures):
 
 
 def extract_pdf_with_gemini(pdf_file):
-    """Render the first PDF page and ask Gemini Vision for normalized lectures."""
+    """تحويل أول صفحة PDF إلى صورة وقراءة المحاضرات عبر Gemini Vision."""
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return [], "لم يتم ضبط GEMINI_API_KEY. أضف المفتاح من إعدادات التشغيل لقراءة الجدول المصوّر تلقائيًا."
@@ -121,6 +128,7 @@ def extract_pdf_with_gemini(pdf_file):
         subprocess.run(["pdftoppm", "-f", "1", "-l", "1", "-png", "-r", "180", pdf_path, image_prefix], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         with open(image_prefix + "-1.png", "rb") as image:
             image_data = base64.b64encode(image.read()).decode("ascii")
+    # نطلب JSON من النموذج حتى نستطيع التحقق من النتائج قبل عرضها للمستخدم.
     prompt = '''اقرأ جدول المحاضرات الجامعي من الصورة. أرجع JSON فقط بهذا الشكل:
 {"lectures":[{"subject":"اسم المادة","doctor":"اسم الدكتور","day":"الأحد أو الاثنين أو الثلاثاء أو الأربعاء أو الخميس","start":"HH:MM","end":"HH:MM","room":"رقم القاعة","kind":"نظري أو عملي أو مشروع"}]}
 حوّل الأوقات إلى نظام 24 ساعة. لا تضف بيانات الطالب أو المجموع، ولا تخمّن صفوفًا غير موجودة.'''
@@ -142,11 +150,13 @@ def extract_pdf_with_gemini(pdf_file):
 
 @app.get("/")
 def home():
+    # الواجهة كلها موجودة في قالب HTML واحد لتسهيل تشغيل النسخة الأولية.
     return render_template("index.html")
 
 
 @app.post("/api/analyze")
 def api_analyze():
+    # تحليل الجدول يتم محليًا حتى يعمل التطبيق حتى بدون Gemini.
     data = request.get_json(silent=True) or {}
     lectures = data.get("lectures", [])
     return jsonify(analyze_schedule(lectures))
@@ -161,6 +171,7 @@ def api_chat():
 
 @app.post("/api/upload-pdf")
 def api_upload_pdf():
+    # استقبال الملف من المتصفح وعدم حفظه بشكل دائم على الخادم.
     uploaded = request.files.get("pdf")
     if not uploaded or not uploaded.filename.lower().endswith(".pdf"):
         return jsonify({"lectures": [], "message": "اختر ملف PDF صحيحًا."}), 400
